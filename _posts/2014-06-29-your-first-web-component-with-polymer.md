@@ -6,10 +6,12 @@ categories: polymer
 ---
 
 I spent most of last week at Google I/O getting an overview of the next generation of Android and web development. One
-of the most exciting new annocements were updates to the [Polymer](http://www.polymer-project.org/) project.
+of the most exciting new announcements were updates to the [Polymer](http://www.polymer-project.org/) project.
 
 A good (well, ok, actually terrible... but good for demonstration purposes) idea would be to re-implement a
-`<blink/>` tag using web components.
+`<blink/>` tag using web components. The source code that accompanies this tutorial is available
+[here](https://github.com/benburton/polymer-blink), and you can find a live demo
+[here](http://benburton.github.io/polymer-blink/).
 
 ## Creating our web component template with Yeoman
 
