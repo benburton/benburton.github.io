@@ -168,10 +168,12 @@ The Polymer documentation outlines all sorts of other attributes you can pass in
 
 ## Testing
 
-My good friend [John Paul](https://www.twitter.com/johnkpaul) would *never* use my web component, which would break
-my heart, if it wasn't fully unit tested. Polymer has
-[test tools project](https://github.com/Polymer/polymer-test-tools) which includes some niceties for working with unit
-testing. Modify your `bower.json` file to include this library in `devDependencies` as follows:
+Aside from testing being an important best practice, my good friend [John Paul](https://www.twitter.com/johnkpaul)
+would *never* use my web component, which would break my heart, if it wasn't fully unit tested.
+
+### Test depenedencies
+We'll have some test-specific dependencies required to get things up and running, so let's add `polymer-test-tools`,
+`mocha`, and `sinon` to the `devDependencies` section of our `bower.json` file as follows:
 
     {
       "name": "polymer-blink",
@@ -183,9 +185,154 @@ testing. Modify your `bower.json` file to include this library in `devDependenci
       },
       "devDependencies": {
         "polymer-test-tools": "Polymer/polymer-test-tools#master"
+        "mocha": "~1.14.0",
+        "sinon": "http://sinonjs.org/releases/sinon-1.10.2.js"
       }
     }
 
-... more to come ...
+Here's a better explanation of what, exactly, these things do:
+
+  * `polymer-test-tools` - Polymer has [test tools project](https://github.com/Polymer/polymer-test-tools) which
+     includes some niceties for working with unit tests.
+  * `mocha` - [Mocha](http://visionmedia.github.io/mocha/) is the testing framework we'll be using to test our web
+     component.
+  * `sinon` - [Sinon](http://sinonjs.org/) is a library for spies, stubs, and mocks. Since our web component relies on
+     certain events to occur based on timing, we'll utilize `sinon` to help us mock out the browser's clock.
+
+Run `bower install` to grab the newly added test dependencies for the project.
+
+### Writing our unit test
+
+Create a `tests` directory inside `polymer-blink` to house our tests, and define a `polymer-blink-tests.html` file to
+use for the unit test. Paste the following into the file:
+
+    <!doctype html>
+    <html>
+    <head>
+      <title>polymer-blink</title>
+      <link rel="import" href="../../polymer-test-tools/tools.html">
+      <script src="../../platform/platform.js"></script>
+      <script src="../../polymer-test-tools/htmltest.js"></script>
+      <script src="../../sinon/index.js"></script>
+      <link rel="import" href="../polymer-blink.html">
+    </head>
+    <body>
+
+      <polymer-blink></polymer-blink>
+
+      <script>
+        var clock = sinon.useFakeTimers();
+        document.addEventListener('polymer-ready', function() {
+          var element = document.querySelector('polymer-blink');
+          clock.restore();
+          done();
+        });
+      </script>
+    </body>
+    </html>
+
+The `head` section of this file is importing a bunch of important dependencies for our project.
+
+  * `polymer-test-tools/tools.html` and `polymer-test-tools/htmltest.js` files are file dependencies from the
+[test tools project](https://github.com/Polymer/polymer-test-tools)
+  * `sinon/index.js` loads in Sinon
+  * `platform/platform.js` loads the Polymer platform
+  * `polymer-blink.html` imports our web component
+
+We also define a `<polymer-blink/>` element in the markup in the `<body/>` so that we can observe and interact with it
+in our test.
+
+The `<script/>` tag is the piece that actually performs our test.
+
+First, we stub out the browser's clock using sinon's `useFakeTimers` method, saving it to a `clock` variable. Next, we
+wait until the `polymer-ready` event has been fired in the browser. This event signals that all the web components
+handled by Polymer have been registered and upgraded to use the shadow DOM, so it's important to wait for this event
+before we start trying to test anything. Afterwards, we restore the browser's clock using `clock.restore` (in case any
+subsequent tests depend on a non-stubbed version of the clock), and call Mocha's `done` method to signify the end of
+the test.
+
+We need to call `done` because we're running our test asynchronously after waiting for the `polymer-ready`
+event. If we took out the `done` call, the test would end prematurely in a false positive, because the runner would not
+know to wait for the `polymer-ready` event.
+
+With all the appropriate setup in place, we can write the actual unit test for our component:
+
+    <script>
+      var clock = sinon.useFakeTimers();
+      document.addEventListener('polymer-ready', function() {
+        var element = document.querySelector('polymer-blink');
+        assert.equal(element.style.visibility, '');
+        clock.tick(250);
+        assert.equal(element.style.visibility, 'hidden');
+        clock.tick(250);
+        assert.equal(element.style.visibility, 'visible');
+        clock.restore();
+        done();
+      });
+    </script>
+
+It's fairly simple: we ensure that the element's visibility property is blank to start, changes to `'hidden'` after 250
+milliseconds, and then switches to `'visible'` after another 250 milliseconds.
+
+Create `tests/tests.html` with the following to define a test suite to include our `polymer-blink-test`:
+
+    <link rel="import" href="../../polymer-test-tools/tools.html">
+    <script src="../../polymer-test-tools/mocha-htmltest.js"></script>
+
+    <script>
+      mocha.setup({ui: 'tdd', slow: 1000, timeout: 5000, htmlbase: ''});
+
+      htmlSuite('polymer-blink', function() {
+        htmlTest('tests/polymer-blink-tests.html');
+      });
+
+      mocha.run();
+    </script>
+
+Looks fine, but how do we actually run the test? We'll need to define a test runner that we can access within our
+browser.
+
+### Setting up the test runner
+
+Create a `runner.html` file in the component root to define the overall scaffolding for the web component's
+tests. This should look like this:
+
+    <!doctype html>
+    <html>  
+
+      <head>
+        <title>Polymer Blink Test Runner</title>
+        <meta charset="UTF-8">
+        <script src="../platform/platform.js"></script>
+        <link rel="import" href="tests/tests.html">
+      </head>
+
+      <body>
+        <div id="mocha"></div>
+      </body>
+
+    </html>
+
+We pull in the Polymer `platform.js` file so that the test runner uses Polymer, define a `#mocha` div for the test
+results to render into, and most importantly import our `tests.html` file which contains the test suite.
+
+### A note on Cross Origin Requests and `file://`
+
+You might think, at this point, you'd be able to just open the `runner.html` file in a browser and see the tests
+running. Unfortunately, if you try this you'll be met with the following error:
+
+    XMLHttpRequest cannot load file:///tests/tests.html. Cross origin requests are only supported for HTTP.
+
+This means that using a `link` to include an HTML file is not supported using the `file://` protocol. For this reason,
+it's important to access the `runner.html` file through a web server, so that we can utilize `http://` instead of
+`file://`.
+
+### Running the test
+
+Assuming you've still got your Python web server running, you should be able to navigate to
+`http://localhost:8000/polymer-blink/runner.html` and see the test run successfully:
 
 <img class="screenshot" src="https://raw.githubusercontent.com/benburton/benburton.github.io/master/assets/posts/your-first-web-component-with-polymer/testing/runner.png"/>
+
+
+That's it! Congratulations on defining your first Polymer web component!
